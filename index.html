@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>手机设计工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/fabric@4.6.0/dist/fabric.min.js"></script>
+
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            height: 100vh;
+            margin: 0;
+            padding: 12px;
+            overflow: hidden;
+        }
+
+        .toolbar-group {
+            background: white;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            margin: 0 4px;
+        }
+
+        .input-sm {
+            min-width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 12px;
+            flex-shrink: 1;
+        }
+
+        .touch-target {
+            min-width: 48px;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas-wrapper {
+            flex: 1;
+            position: relative;
+            background: white;
+            border: 1px solid #e5e7eb;
+            margin-top: 12px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas {
+            touch-action: none;
+        }
+
+        /* 缩放控制器样式 */
+        .zoom-controls {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 1000;
+            pointer-events: auto;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            user-select: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        
+        /* 增加按钮悬停效果 */
+        .zoom-btn:hover {
+            background: rgba(0, 0, 0, 0.85);
+            transform: scale(1.05);
+        }
+        
+        /* 确保缩放指示器始终可见 */
+        .zoom-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        /* 按钮分组样式 */
+        .zoom-group {
+            display: flex;
+            gap: 8px;
+        }
+        
+        /* 垂直按钮分组 */
+        .zoom-group-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* 操作提示区域样式 */
+        #tip-container {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 1000;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        /* 临时使用系统字体确保样式生效 */
+        @font-face {
+            font-family: 'FangYuan';
+            src: local('Microsoft YaHei'), local('SimHei'); /* 回退到系统字体 */
+        }
+        @font-face {
+            font-family: 'ChenDaiMing';
+            src: local('Microsoft YaHei'), local('SimHei');
+        }
+        @font-face {
+            font-family: 'FZKaiTi';
+            src: local('KaiTi'), local('SimKai'); /* 系统楷体 */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <div class="flex flex-wrap gap-3">
+        <!-- 图形设置组 -->
+        <div class="toolbar-group flex-1 min-w-[240px]">
+            <div class="text-sm font-medium text-gray-700 mb-2">图形设置</div>
+            <div class="flex gap-2 shape-controls">
+                <select id="shapeType" class="input-sm touch-target" style="min-width: 80px;">
+                    <option value="rect">矩形</option>
+                    <option value="circle">圆形</option>
+                    <option value="triangle">三角形</option>
+                    <option value="line">线条</option>
+                </select>
+                <input type="number" id="shapeHeight" placeholder="高(mm)" class="input-sm touch-target" min="5" max="80" value="30">
+                <input type="number" id="shapeWidth" placeholder="宽(mm)" class="input-sm touch-target" min="5" max="105" value="50">
+                <input type="number" id="borderWidth" placeholder="边框(mm)" class="input-sm touch-target" min="0.1" step="0.1" value="1">
+                <button id="addShapeBtn" class="bg-blue-500 text-white input-sm touch-target">添加图形</button>
+            </div>
+        </div>
+
+        <!-- 文字设置组 -->
+        <div class="toolbar-group flex-1 min-w-[240px]">
+            <div class="text-sm font-medium text-gray-700 mb-2">文字设置</div>
+            <div class="flex gap-2 flex-wrap">
+                <select id="fontFamily" class="input-sm touch-target">
+                    <option value="FangYuan">方圆体</option>
+                    <option value="ChenDaiMing">陈代明硬笔体</option>
+                    <option value="FZKaiTi">方正楷体</option>
+                    <option value="Microsoft YaHei">微软雅黑</option>
+                </select>
+                <input type="number" id="fontSize" placeholder="字号" class="input-sm touch-target" min="10" value="20">
+                <input type="text" id="textContent" placeholder="输入文字（可双击编辑）" class="input-sm touch-target flex-1">
+                <button id="addText" class="bg-blue-500 text-white input-sm touch-target">添加文字</button>
+                <button id="editText" class="bg-green-500 text-white input-sm touch-target">编辑文字</button>
+            </div>
+        </div>
+
+        <!-- 媒体功能组 -->
+        <div class="toolbar-group flex-1 min-w-[180px]">
+            <div class="text-sm font-medium text-gray-700 mb-2">媒体与导出</div>
+            <div class="flex gap-2 flex-wrap">
+                <label class="bg-green-500 text-white input-sm touch-target cursor-pointer">
+                    上传图片 <input type="file" id="imageUpload" accept="image/*" class="hidden">
+                </label>
+                <button id="saveBtn" class="bg-blue-600 text-white input-sm touch-target">智能提取导出</button>
+                <button id="deleteBtn" class="bg-red-500 text-white input-sm touch-target">删除选中</button>
+            </div>
+        </div>
+
+        <!-- 特效模式组 -->
+        <div class="toolbar-group flex-1 min-w-[180px]">
+            <div class="text-sm font-medium text-gray-700 mb-2">特效模式</div>
+            <div class="flex gap-2 flex-wrap">
+                <button id="toggleHollowMode" class="bg-indigo-500 text-white input-sm touch-target">
+                    启用镂空模式
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="canvas-wrapper">
+        <canvas id="canvas"></canvas>
+    </div>
+    
+    <!-- 缩放控制按钮 - 移到body作为直接子元素 -->
+    <div class="zoom-controls">
+        <div class="zoom-group-vertical">
+            <div id="zoomIn" class="zoom-btn" title="放大视图">+</div>
+            <div id="zoomOut" class="zoom-btn" title="缩小视图">−</div>
+        </div>
+        <div class="zoom-group-vertical">
+            <div id="zoomFit" class="zoom-btn" title="适应画布">⤢</div>
+            <div id="zoomReset" class="zoom-btn" title="重置视图">⟲</div>
+        </div>
+        <div class="zoom-group-vertical">
+            <div id="enlargeObject" class="zoom-btn" title="放大选中对象">↗</div>
+            <div id="shrinkObject" class="zoom-btn" title="缩小选中对象">↘</div>
+        </div>
+    </div>
+    
+    <!-- 添加独立的缩放指示器 -->
+    <div id="zoomIndicator" class="zoom-indicator">缩放: 100%</div>
+
+    <!-- 操作提示区域 -->
+    <div id="tip-container" style="opacity: 0;">拖动元素进行位置调整</div>
+
+    <script>
+        const MM_TO_PIXEL = 96 / 25.4; 
+        const SCALE_FACTOR = 2 / 3;
+
+        function init() {
+            // 定义画布的最大尺寸（移动设备上的合理尺寸）
+            const CANVAS_WIDTH = 375; // iPhone 8 宽度
+            const CANVAS_HEIGHT = 667; // iPhone 8 高度
+            
+            const canvasEl = document.getElementById('canvas');
+            const canvas = new fabric.Canvas(canvasEl, {
+                backgroundColor: 'white',
+                preserveObjectStacking: true,
+                selectionColor: 'rgba(59,130,246,0.1)',
+                selectionBorderColor: '#3b82f6',
+                width: CANVAS_WIDTH,
+                height: CANVAS_HEIGHT,
+                controlsAboveOverlay: true, // 确保控制点在最上层
+                perPixelTargetFind: true // 精确的点击检测
+            });
+
+            // 缩放相关变量
+            let zoomLevel = 1;
+            const minZoom = 0.5;
+            const maxZoom = 5;
+
+            const elements = {
+                shapeType: document.getElementById('shapeType'),
+                shapeWidth: document.getElementById('shapeWidth'),
+                shapeHeight: document.getElementById('shapeHeight'),
+                addShapeBtn: document.getElementById('addShapeBtn'),
+                borderWidth: document.getElementById('borderWidth'),
+                deleteBtn: document.getElementById('deleteBtn'),
+                imageUpload: document.getElementById('imageUpload'),
+                fontFamily: document.getElementById('fontFamily'),
+                fontSize: document.getElementById('fontSize'),
+                addText: document.getElementById('addText'),
+                editText: document.getElementById('editText'),
+                textContent: document.getElementById('textContent'),
+                saveBtn: document.getElementById('saveBtn'),
+                tipContainer: document.getElementById('tip-container'),
+                zoomIn: document.getElementById('zoomIn'),
+                zoomOut: document.getElementById('zoomOut'),
+                zoomReset: document.getElementById('zoomReset'),
+                zoomFit: document.getElementById('zoomFit'),
+                zoomIndicator: document.getElementById('zoomIndicator'),
+                enlargeObject: document.getElementById('enlargeObject'),
+                shrinkObject: document.getElementById('shrinkObject'),
+                toggleHollowMode: document.getElementById('toggleHollowMode')
+            };
+
+            // 全局设置以跟踪当前使用模式
+            const appState = {
+                hollowMode: false // 默认不使用镂空模式
+            };
+
+            // 缩放系统 - 添加自动适应内容的功能
+            const zoomSystem = {
+                zoomIn() {
+                    if (zoomLevel < maxZoom) {
+                        zoomLevel = Math.min(zoomLevel * 1.2, maxZoom);
+                        this.applyZoom();
+                    }
+                },
+                zoomOut() {
+                    if (zoomLevel > minZoom) {
+                        zoomLevel = Math.max(zoomLevel / 1.2, minZoom);
+                        this.applyZoom();
+                    }
+                },
+                resetZoom() {
+                    zoomLevel = 1;
+                    this.applyZoom();
+                    tipSystem.show('已重置缩放');
+                },
+                // 根据内容自动调整缩放
+                zoomToFitContent() {
+                    const objects = canvas.getObjects();
+                    if (objects.length === 0) return;
+                    
+                    // 获取所有对象的包围盒
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    
+                    objects.forEach(obj => {
+                        if (!obj.visible) return;
+                        
+                        const objBounds = obj.getBoundingRect();
+                        minX = Math.min(minX, objBounds.left);
+                        minY = Math.min(minY, objBounds.top);
+                        maxX = Math.max(maxX, objBounds.left + objBounds.width);
+                        maxY = Math.max(maxY, objBounds.top + objBounds.height);
+                    });
+                    
+                    // 计算内容的宽高
+                    const contentWidth = maxX - minX;
+                    const contentHeight = maxY - minY;
+                    
+                    // 获取容器尺寸
+                    const wrapper = document.getElementById('canvas-wrapper');
+                    const containerWidth = wrapper.offsetWidth - 40;  // 减去边距
+                    const containerHeight = wrapper.offsetHeight - 40;
+                    
+                    // 计算需要的缩放比例，给边缘留些空间
+                    const widthRatio = containerWidth / contentWidth;
+                    const heightRatio = containerHeight / contentHeight;
+                    
+                    // 取较小的比例，确保内容完全可见
+                    let newZoomLevel = Math.min(widthRatio, heightRatio) * 0.9;
+                    
+                    // 设置合理的缩放范围
+                    newZoomLevel = Math.min(Math.max(newZoomLevel, minZoom), maxZoom);
+                    
+                    // 如果缩放差异较大，才更新缩放
+                    if (Math.abs(newZoomLevel - zoomLevel) > 0.1) {
+                        zoomLevel = newZoomLevel;
+                        this.applyZoom();
+                        tipSystem.show(`已调整视图以适应内容 (${Math.round(zoomLevel * 100)}%)`);
+                    }
+                },
+                // 统一应用缩放的方法
+                applyZoom() {
+                    canvas.setZoom(zoomLevel);
+                    canvas.setDimensions({
+                        width: CANVAS_WIDTH * zoomLevel,
+                        height: CANVAS_HEIGHT * zoomLevel
+                    });
+                    
+                    // 更新缩放指示器
+                    document.getElementById('zoomIndicator').textContent = `缩放: ${Math.round(zoomLevel * 100)}%`;
+                    
+                    // 显示临时提示
+                    tipSystem.show(`缩放: ${Math.round(zoomLevel * 100)}%`);
+                    
+                    // 确保所有对象在新的缩放比例下仍然可见
+                    canvas.forEachObject(enforceObjectBoundaries);
+                },
+                // 缩放选中对象
+                enlargeSelectedObject() {
+                    const activeObj = canvas.getActiveObject();
+                    if (!activeObj) {
+                        tipSystem.show('请先选择一个对象');
+                        return;
+                    }
+                    
+                    // 计算新的缩放因子，每次放大10%
+                    const newScaleX = activeObj.scaleX * 1.1;
+                    const newScaleY = activeObj.scaleY * 1.1;
+                    
+                    // 计算新尺寸
+                    const newWidth = activeObj.width * newScaleX;
+                    const newHeight = activeObj.height * newScaleY;
+                    
+                    // 检查是否超出画布边界
+                    if (newWidth > CANVAS_WIDTH * 0.95 || newHeight > CANVAS_HEIGHT * 0.95) {
+                        tipSystem.show('对象已达到最大尺寸');
+                        return;
+                    }
+                    
+                    // 应用新的缩放
+                    activeObj.set({
+                        scaleX: newScaleX,
+                        scaleY: newScaleY
+                    });
+                    
+                    // 更新UI控件
+                    if (['rect', 'triangle', 'circle', 'line'].includes(activeObj.type)) {
+                        if (activeObj.type === 'circle') {
+                            const effectiveRadius = activeObj.radius * activeObj.scaleX;
+                            elements.shapeWidth.value = Math.round(effectiveRadius * 2 / (MM_TO_PIXEL * SCALE_FACTOR));
+                            elements.shapeHeight.value = elements.shapeWidth.value;
+                        } else {
+                            elements.shapeWidth.value = Math.round(activeObj.width * activeObj.scaleX / (MM_TO_PIXEL * SCALE_FACTOR));
+                            elements.shapeHeight.value = Math.round(activeObj.height * activeObj.scaleY / (MM_TO_PIXEL * SCALE_FACTOR));
+                        }
+                    } else if (activeObj.type === 'text') {
+                        const newFontSize = parseFloat(elements.fontSize.value) * 1.1;
+                        elements.fontSize.value = Math.round(newFontSize);
+                        activeObj.set({ fontSize: newFontSize });
+                    }
+                    
+                    canvas.requestRenderAll();
+                    tipSystem.show('已放大选中对象');
+                    
+                    // 确保对象不会超出画布
+                    enforceObjectBoundaries(activeObj);
+                },
+                shrinkSelectedObject() {
+                    const activeObj = canvas.getActiveObject();
+                    if (!activeObj) {
+                        tipSystem.show('请先选择一个对象');
+                        return;
+                    }
+                    
+                    // 计算新的缩放因子，每次缩小10%
+                    const newScaleX = activeObj.scaleX * 0.9;
+                    const newScaleY = activeObj.scaleY * 0.9;
+                    
+                    // 计算新尺寸
+                    const newWidth = activeObj.width * newScaleX;
+                    const newHeight = activeObj.height * newScaleY;
+                    
+                    // 检查是否小于最小尺寸
+                    const minSize = 5 * MM_TO_PIXEL * SCALE_FACTOR;
+                    if (newWidth < minSize || newHeight < minSize) {
+                        tipSystem.show('对象已达到最小尺寸');
+                        return;
+                    }
+                    
+                    // 应用新的缩放
+                    activeObj.set({
+                        scaleX: newScaleX,
+                        scaleY: newScaleY
+                    });
+                    
+                    // 更新UI控件
+                    if (['rect', 'triangle', 'circle', 'line'].includes(activeObj.type)) {
+                        if (activeObj.type === 'circle') {
+                            const effectiveRadius = activeObj.radius * activeObj.scaleX;
+                            elements.shapeWidth.value = Math.round(effectiveRadius * 2 / (MM_TO_PIXEL * SCALE_FACTOR));
+                            elements.shapeHeight.value = elements.shapeWidth.value;
+                        } else {
+                            elements.shapeWidth.value = Math.round(activeObj.width * activeObj.scaleX / (MM_TO_PIXEL * SCALE_FACTOR));
+                            elements.shapeHeight.value = Math.round(activeObj.height * activeObj.scaleY / (MM_TO_PIXEL * SCALE_FACTOR));
+                        }
+                    } else if (activeObj.type === 'text') {
+                        const newFontSize = parseFloat(elements.fontSize.value) * 0.9;
+                        elements.fontSize.value = Math.round(newFontSize);
+                        activeObj.set({ fontSize: newFontSize });
+                    }
+                    
+                    canvas.requestRenderAll();
+                    tipSystem.show('已缩小选中对象');
+                    
+                    // 确保对象不会超出画布
+                    enforceObjectBoundaries(activeObj);
+                }
+            };
+
+            // 提示系统
+            const tipSystem = {
+                show(message, duration = 2000) {
+                    elements.tipContainer.textContent = message;
+                    elements.tipContainer.style.opacity = '1';
+                    
+                    // 自动隐藏提示
+                    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+                    this.hideTimeout = setTimeout(() => {
+                        elements.tipContainer.style.opacity = '0';
+                    }, duration);
+                },
+                hideTimeout: null
+            };
+
+            // 尺寸同步系统
+            const sizeSync = {
+                updateShape() {
+                    const activeObj = canvas.getActiveObject();
+                    if (!activeObj) return;
+                    
+                    let sizeChanged = false;
+                    const originalWidth = activeObj.width * activeObj.scaleX;
+                    const originalHeight = activeObj.height * activeObj.scaleY;
+
+                    // 图形尺寸更新逻辑
+                    if (['rect', 'triangle', 'line'].includes(activeObj.type)) {
+                        const newWidth = parseFloat(elements.shapeWidth.value) * MM_TO_PIXEL * SCALE_FACTOR;
+                        const newHeight = parseFloat(elements.shapeHeight.value) * MM_TO_PIXEL * SCALE_FACTOR;
+                        activeObj.set({ width: newWidth, height: newHeight });
+                        sizeChanged = true;
+                    }
+                    // 圆形尺寸更新逻辑
+                    if (activeObj.type === 'circle') {
+                        const newDiameter = parseFloat(elements.shapeWidth.value) * MM_TO_PIXEL * SCALE_FACTOR;
+                        activeObj.set({ radius: newDiameter / 2 });
+                        sizeChanged = true;
+                    }
+                    // 文字样式更新逻辑
+                    if (activeObj.type === 'text') {
+                        const newSize = parseFloat(elements.fontSize.value);
+                        const oldSize = activeObj.fontSize;
+                        
+                        activeObj.set({
+                            fontFamily: elements.fontFamily.value,
+                            fontSize: newSize,
+                            text: elements.textContent.value || '示例文字'
+                        });
+                        
+                        sizeChanged = (Math.abs(newSize - oldSize) > 5);
+                    }
+                    
+                    canvas.requestRenderAll();
+                    
+                    // 检查尺寸变化是否显著，如果是，则自动调整视图
+                    if (sizeChanged) {
+                        const newWidth = activeObj.width * activeObj.scaleX;
+                        const newHeight = activeObj.height * activeObj.scaleY;
+                        
+                        // 如果尺寸变大了，且对象变得很大，自动调整视图以适应对象
+                        if ((newWidth > originalWidth * 1.5 || newHeight > originalHeight * 1.5) &&
+                            (newWidth > CANVAS_WIDTH * 0.5 || newHeight > CANVAS_HEIGHT * 0.5)) {
+                            setTimeout(() => zoomSystem.zoomToFitContent(), 50);
+                        }
+                    }
+                },
+                // 从对象同步到控件
+                syncFromObject(obj) {
+                    if (!obj) return;
+                    
+                    if (['rect', 'triangle', 'line'].includes(obj.type)) {
+                        elements.shapeWidth.value = Math.round(obj.width / (MM_TO_PIXEL * SCALE_FACTOR));
+                        elements.shapeHeight.value = Math.round(obj.height / (MM_TO_PIXEL * SCALE_FACTOR));
+                    } else if (obj.type === 'circle') {
+                        elements.shapeWidth.value = Math.round(obj.radius * 2 / (MM_TO_PIXEL * SCALE_FACTOR));
+                        elements.shapeHeight.value = elements.shapeWidth.value;
+                    } else if (obj.type === 'text') {
+                        elements.fontSize.value = obj.fontSize;
+                        elements.fontFamily.value = obj.fontFamily;
+                        elements.textContent.value = obj.text;
+                    }
+                }
+            };
+
+            // 图形创建系统
+            const shapeSystem = {
+                createShape() {
+                    const type = elements.shapeType.value;
+                    const width = parseFloat(elements.shapeWidth.value) * MM_TO_PIXEL * SCALE_FACTOR;
+                    const height = parseFloat(elements.shapeHeight.value) * MM_TO_PIXEL * SCALE_FACTOR;
+                    const strokeWidth = parseFloat(elements.borderWidth.value) * MM_TO_PIXEL * SCALE_FACTOR;
+
+                    // 限制尺寸不超过画布
+                    const maxWidth = CANVAS_WIDTH * 0.95;
+                    const maxHeight = CANVAS_HEIGHT * 0.95;
+                    
+                    const safeWidth = Math.min(width, maxWidth);
+                    const safeHeight = Math.min(height, maxHeight);
+
+                    const common = {
+                        fill: 'transparent',
+                        stroke: '#333',
+                        strokeWidth: strokeWidth,
+                        strokeUniform: true,
+                        hasRotatingPoint: false, // 禁用旋转
+                        left: canvas.width / 2 / zoomLevel,
+                        top: canvas.height / 2 / zoomLevel
+                    };
+
+                    // 只有在镂空模式下才设置镂空效果，并且只针对图片生效
+                    if (appState.hollowMode) {
+                        common.globalCompositeOperation = 'destination-out';
+                    }
+
+                    const shape = type === 'circle' 
+                        ? new fabric.Circle({ radius: safeWidth/2, ...common })
+                        : type === 'triangle'
+                        ? new fabric.Triangle({ width: safeWidth, height: safeHeight, ...common })
+                        : type === 'line'
+                        ? new fabric.Line([0,0,safeWidth,0], { ...common })
+                        : new fabric.Rect({ width: safeWidth, height: safeHeight, ...common });
+
+                    canvas.add(shape).setActiveObject(shape);
+                    enforceObjectBoundaries(shape);
+                    
+                    const modeText = appState.hollowMode ? "（镂空模式）" : "";
+                    tipSystem.show(`已添加${elements.shapeType.options[elements.shapeType.selectedIndex].text}${modeText}，可拖动调整位置`);
+                    
+                    // 检查对象是否很大，自动调整视图以适应对象
+                    if (safeWidth > CANVAS_WIDTH * 0.5 || safeHeight > CANVAS_HEIGHT * 0.5) {
+                        // 等待一帧，确保对象已经完全渲染
+                        setTimeout(() => zoomSystem.zoomToFitContent(), 50);
+                    }
+                }
+            };
+
+            // 文字创建系统
+            const textSystem = {
+                addText() {
+                    const text = new fabric.Text(elements.textContent.value || '示例文字', {
+                        left: canvas.width / 2 / zoomLevel,
+                        top: canvas.height / 2 / zoomLevel,
+                        fontFamily: elements.fontFamily.value,
+                        fontSize: parseFloat(elements.fontSize.value),
+                        fill: '#333', // 默认深灰色，在白色背景上可见
+                        editable: true
+                    });
+
+                    // 只有在镂空模式下才设置镂空效果，并且只针对图片生效
+                    if (appState.hollowMode) {
+                        text.set('globalCompositeOperation', 'destination-out');
+                    }
+
+                    canvas.add(text).setActiveObject(text);
+                    enforceObjectBoundaries(text);
+                    
+                    const modeText = appState.hollowMode ? "（镂空模式）" : "";
+                    tipSystem.show(`已添加文字${modeText}，可拖动调整位置和大小`);
+                },
+                editText() {
+                    const activeObj = canvas.getActiveObject();
+                    if (activeObj && activeObj.type === 'text') {
+                        activeObj.enterEditing();
+                        tipSystem.show('可以直接编辑文字内容');
+                    } else {
+                        tipSystem.show('请先选择文字对象');
+                    }
+                }
+            };
+
+            // 图片上传系统 - 改进自动检测
+            const imageSystem = {
+                // 改进二维码检测算法
+                detectQRCode(imgElement) {
+                    try {
+                        // 创建临时Canvas用于分析图片
+                        const tempCanvas = document.createElement('canvas');
+                        const tempCtx = tempCanvas.getContext('2d');
+                        
+                        // 调整为较小尺寸以提高性能
+                        const size = 300; // 增加分析尺寸以提高准确性
+                        tempCanvas.width = size;
+                        tempCanvas.height = size;
+                        
+                        // 绘制图像
+                        tempCtx.drawImage(imgElement, 0, 0, size, size);
+                        
+                        // 获取图像数据
+                        const imageData = tempCtx.getImageData(0, 0, size, size);
+                        const data = imageData.data;
+                        
+                        // 计算黑白像素的特征
+                        let blackPixels = 0;
+                        let whitePixels = 0;
+                        let grayPixels = 0;
+                        let colorPixels = 0;
+                        
+                        // 检测图像边缘特征（二维码通常有明显的边缘）
+                        let edgeCount = 0;
+                        let pixelChanges = 0;
+                        
+                        // 分析每一行，检测颜色变化（二维码有很多黑白交替）
+                        for (let y = 1; y < size; y++) {
+                            for (let x = 1; x < size; x++) {
+                                const idx = (y * size + x) * 4;
+                                const prevIdxX = (y * size + (x-1)) * 4;
+                                const prevIdxY = ((y-1) * size + x) * 4;
+                                
+                                // 检测水平和垂直方向的颜色变化
+                                if (Math.abs(data[idx] - data[prevIdxX]) > 50) {
+                                    pixelChanges++;
+                                }
+                                if (Math.abs(data[idx] - data[prevIdxY]) > 50) {
+                                    pixelChanges++;
+                                }
+                                
+                                const r = data[idx];
+                                const g = data[idx + 1];
+                                const b = data[idx + 2];
+                                
+                                // 检查是否为黑白或灰色像素
+                                const isGray = Math.abs(r - g) < 20 && Math.abs(r - b) < 20 && Math.abs(g - b) < 20;
+                                
+                                if (isGray) {
+                                    if (r < 60) {
+                                        blackPixels++;
+                                    } else if (r > 200) {
+                                        whitePixels++;
+                                    } else {
+                                        grayPixels++;
+                                    }
+                                } else {
+                                    colorPixels++;
+                                }
+                            }
+                        }
+                        
+                        const totalPixels = size * size;
+                        const blackWhiteRatio = (blackPixels + whitePixels) / totalPixels;
+                        const colorRatio = colorPixels / totalPixels;
+                        const pixelChangeRatio = pixelChanges / (totalPixels * 2); // 考虑了水平和垂直方向
+                        
+                        // 改进的二维码特征检测:
+                        // 1. 大量黑白像素
+                        // 2. 很少的彩色像素
+                        // 3. 频繁的像素变化（黑白交替）
+                        // 4. 放宽条件，优先识别为二维码
+                        const isQRCode = (
+                            (blackWhiteRatio > 0.7 && colorRatio < 0.2) || // 常规二维码
+                            (pixelChangeRatio > 0.15 && blackPixels > totalPixels * 0.05) || // 基于边缘特征
+                            (blackPixels > totalPixels * 0.1 && blackPixels < totalPixels * 0.7 && 
+                             whitePixels > totalPixels * 0.1) // 基于黑白比例
+                        );
+                        
+                        // 添加判断为二维码的倾向 - 宁可错误地将普通图片识别为二维码，也不要错过二维码
+                        const possiblyQRCode = 
+                            (blackPixels > totalPixels * 0.05 && pixelChangeRatio > 0.12) ||
+                            (blackWhiteRatio > 0.6 && colorRatio < 0.3);
+                        
+                        console.log('图片分析结果:', {
+                            blackWhiteRatio, colorRatio, pixelChangeRatio,
+                            blackPixels: blackPixels/totalPixels, 
+                            whitePixels: whitePixels/totalPixels,
+                            isQRCode, possiblyQRCode
+                        });
+                        
+                        // 分析结果 - 优先判断为二维码
+                        return {
+                            isQRCode: isQRCode || possiblyQRCode,
+                            blackWhiteRatio: blackWhiteRatio,
+                            colorRatio: colorRatio,
+                            confidence: isQRCode ? 'high' : (possiblyQRCode ? 'medium' : 'low')
+                        };
+                    } catch (e) {
+                        console.error('图片分析出错:', e);
+                        return { isQRCode: true }; // 出错时默认为二维码，避免丢失
+                    }
+                },
+                
+                uploadImage(e) {
+                    if (e.target.files && e.target.files[0]) {
+                        tipSystem.show('正在分析图片类型，请稍候...');
+                        
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            // 创建临时图片元素用于分析
+                            const tempImg = new Image();
+                            tempImg.onload = () => {
+                                // 检测图片类型
+                                const analysisResult = this.detectQRCode(tempImg);
+                                const isQRCode = analysisResult.isQRCode;
+                                
+                                // 根据检测结果设置图片类型
+                                const imageType = isQRCode ? 'qrcode' : 'background';
+                                
+                                // 创建Fabric图像对象
+                                fabric.Image.fromURL(event.target.result, function(img) {
+                                    // 等比例缩放图片
+                                    const maxSide = Math.min(canvas.width, canvas.height) * 0.4 / zoomLevel;
+                                    let scale = 1;
+                                    
+                                    if (img.width > img.height && img.width > maxSide) {
+                                        scale = maxSide / img.width;
+                                    } else if (img.height > maxSide) {
+                                        scale = maxSide / img.height;
+                                    }
+                                    
+                                    img.scale(scale).set({
+                                        left: canvas.width / 2 / zoomLevel,
+                                        top: canvas.height / 2 / zoomLevel,
+                                        selectable: true,
+                                        evented: true,
+                                        imageType: imageType, // 自动设置图片类型
+                                        confidence: analysisResult.confidence // 保存检测置信度
+                                    });
+                                    
+                                    canvas.add(img);
+                                    canvas.sendToBack(img);
+                                    canvas.setActiveObject(img);
+                                    enforceObjectBoundaries(img);
+                                    
+                                    if (isQRCode) {
+                                        tipSystem.show('检测到二维码图片，导出时将保留并去除白色背景');
+                                    } else {
+                                        tipSystem.show('检测到背景图片，导出时将被移除');
+                                    }
+                                });
+                            };
+                            tempImg.src = event.target.result;
+                        };
+                        reader.readAsDataURL(e.target.files[0]);
+                    }
+                }
+            };
+
+            // 修改工具栏组标题
+            document.querySelector('.toolbar-group:nth-child(3) .text-sm').textContent = '媒体与导出';
+
+            // 修改保存按钮文字
+            const saveBtn = document.getElementById('saveBtn');
+            if (saveBtn) {
+                saveBtn.textContent = '智能提取导出';
+                saveBtn.className = 'bg-blue-600 text-white input-sm touch-target';
+            }
+
+            // 移除单独的二维码提取按钮
+            if (document.getElementById('qrcodeExtractBtn')) {
+                document.getElementById('qrcodeExtractBtn').remove();
+            }
+
+            // 整合的提取和导出系统
+            const saveSystem = {
+                // 提取并处理二维码图片，返回处理后的图片Promise
+                async processQRCode(qrcodeImage) {
+                    return new Promise((resolve) => {
+                        try {
+                            const imgElement = qrcodeImage.getElement();
+                            
+                            // 创建临时Canvas用于处理图像
+                            const tempCanvas = document.createElement('canvas');
+                            const tempCtx = tempCanvas.getContext('2d');
+                            
+                            // 设置Canvas尺寸
+                            tempCanvas.width = imgElement.naturalWidth;
+                            tempCanvas.height = imgElement.naturalHeight;
+                            
+                            // 绘制图像
+                            tempCtx.drawImage(imgElement, 0, 0);
+                            
+                            // 获取图像数据
+                            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                            const data = imageData.data;
+                            
+                            // 处理图像数据，将白色背景变为透明
+                            for (let i = 0; i < data.length; i += 4) {
+                                const r = data[i];
+                                const g = data[i + 1];
+                                const b = data[i + 2];
+                                
+                                // 检测白色或接近白色的像素
+                                if (r > 230 && g > 230 && b > 230) {
+                                    data[i + 3] = 0; // 设为透明
+                                }
+                            }
+                            
+                            // 将处理后的数据放回Canvas
+                            tempCtx.putImageData(imageData, 0, 0);
+                            
+                            // 转换为数据URL
+                            const processedDataURL = tempCanvas.toDataURL('image/png');
+                            
+                            // 创建新的Fabric图像对象
+                            fabric.Image.fromURL(processedDataURL, function(newImg) {
+                                // 保持原图属性
+                                newImg.set({
+                                    left: qrcodeImage.left,
+                                    top: qrcodeImage.top,
+                                    scaleX: qrcodeImage.scaleX,
+                                    scaleY: qrcodeImage.scaleY,
+                                    angle: qrcodeImage.angle,
+                                    imageType: 'qrcode_processed'
+                                });
+                                
+                                resolve(newImg);
+                            });
+                        } catch (error) {
+                            console.error('处理二维码时出错:', error);
+                            // 出错时返回原图对象
+                            resolve(qrcodeImage);
+                        }
+                    });
+                },
+                
+                // 调试方法 - 显示当前画布对象信息
+                debugCanvasObjects() {
+                    const objects = canvas.getObjects();
+                    console.log('画布上的对象:', objects.map(obj => ({
+                        type: obj.type,
+                        imageType: obj.imageType,
+                        left: obj.left,
+                        top: obj.top,
+                        width: obj.width,
+                        height: obj.height,
+                        scaleX: obj.scaleX,
+                        scaleY: obj.scaleY
+                    })));
+                    return objects;
+                },
+                
+                // 智能提取并导出所有内容
+                async saveTransparent() {
+                    tipSystem.show('正在提取内容并处理图片，请稍候...');
+                    
+                    try {
+                        // 调试输出画布对象
+                        const allObjects = this.debugCanvasObjects();
+                        
+                        // 获取要保留的对象
+                        const textAndShapes = allObjects.filter(obj => obj.type !== 'image');
+                        const qrcodeImages = allObjects.filter(obj => 
+                            obj.type === 'image' && 
+                            (obj.imageType === 'qrcode' || obj.imageType === 'qrcode_processed')
+                        );
+                        
+                        // 所有要导出的对象
+                        const objectsToExport = [...textAndShapes];
+                        
+                        // 如果没有发现二维码图片，尝试更宽松的查找
+                        if (qrcodeImages.length === 0) {
+                            console.log('没有找到明确标记为二维码的图片，尝试查找所有图片');
+                            // 将所有图片都视为二维码
+                            const allImages = allObjects.filter(obj => obj.type === 'image');
+                            if (allImages.length > 0) {
+                                // 添加所有图片对象
+                                objectsToExport.push(...allImages);
+                                console.log('添加了所有图片对象:', allImages.length);
+                            }
+                        } else {
+                            // 处理所有二维码图片
+                            const processedQRImages = [];
+                            for (const qrcode of qrcodeImages) {
+                                const processedQR = await this.processQRCode(qrcode);
+                                processedQRImages.push(processedQR);
+                            }
+                            objectsToExport.push(...processedQRImages);
+                        }
+                        
+                        // 如果没有可导出的内容
+                        if (objectsToExport.length === 0) {
+                            tipSystem.show('没有可导出的内容，请先添加文字、图形或二维码');
+                            return;
+                        }
+                        
+                        console.log('准备导出的对象:', objectsToExport.length);
+                        
+                        // 创建临时画布
+                        const tempCanvas = new fabric.StaticCanvas(null, {
+                            width: canvas.width / zoomLevel,
+                            height: canvas.height / zoomLevel,
+                            backgroundColor: 'transparent'
+                        });
+                        
+                        // 克隆并添加所有对象到临时画布
+                        const clonePromises = objectsToExport.map(obj => {
+                            return new Promise(resolve => {
+                                obj.clone(cloned => {
+                                    console.log('克隆对象:', cloned.type, cloned.imageType);
+                                    // 设置混合模式为普通
+                                    cloned.set({
+                                        globalCompositeOperation: 'source-over',
+                                        left: cloned.left,
+                                        top: cloned.top
+                                    });
+                                    
+                                    tempCanvas.add(cloned);
+                                    resolve();
+                                });
+                            });
+                        });
+                        
+                        // 等待所有对象克隆完成
+                        await Promise.all(clonePromises);
+                        tempCanvas.renderAll();
+                        
+                        // 生成图片
+                        const dataURL = tempCanvas.toDataURL({ 
+                            format: 'png',
+                            multiplier: 2 // 提高导出质量
+                        });
+                        
+                        // 创建下载链接
+                        const link = document.createElement('a');
+                        link.href = dataURL;
+                        link.download = '智能提取图.png';
+                        
+                        // 触发下载
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        const imageCount = objectsToExport.filter(obj => obj.type === 'image').length;
+                        tipSystem.show(`内容提取完成: 已导出${textAndShapes.length}个文字/图形和${imageCount}个二维码`);
+                    } catch (error) {
+                        console.error('导出过程中出错:', error);
+                        tipSystem.show('导出过程中出现错误，请重试');
+                    }
+                }
+            };
+
+            // 事件绑定
+            elements.addShapeBtn.addEventListener('click', () => shapeSystem.createShape());
+            elements.addText.addEventListener('click', () => textSystem.addText());
+            elements.editText.addEventListener('click', () => textSystem.editText());
+            elements.shapeWidth.addEventListener('input', () => sizeSync.updateShape());
+            elements.shapeHeight.addEventListener('input', () => sizeSync.updateShape());
+            elements.fontFamily.addEventListener('change', () => sizeSync.updateShape());
+            elements.fontSize.addEventListener('input', () => sizeSync.updateShape());
+            elements.textContent.addEventListener('input', () => sizeSync.updateShape());
+            elements.imageUpload.addEventListener('change', (e) => imageSystem.uploadImage(e));
+            elements.saveBtn.addEventListener('click', () => saveSystem.saveTransparent());
+            
+            // 缩放控制
+            elements.zoomIn.addEventListener('click', () => zoomSystem.zoomIn());
+            elements.zoomOut.addEventListener('click', () => zoomSystem.zoomOut());
+            elements.zoomReset.addEventListener('click', () => zoomSystem.resetZoom());
+            elements.zoomFit.addEventListener('click', () => zoomSystem.zoomToFitContent());
+            elements.enlargeObject.addEventListener('click', () => zoomSystem.enlargeSelectedObject());
+            elements.shrinkObject.addEventListener('click', () => zoomSystem.shrinkSelectedObject());
+            
+            // 支持鼠标滚轮缩放
+            canvasEl.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    zoomSystem.zoomIn();
+                } else {
+                    zoomSystem.zoomOut();
+                }
+            });
+            
+            elements.deleteBtn.addEventListener('click', () => {
+                const active = canvas.getActiveObject();
+                if (active) {
+                    canvas.remove(active);
+                    tipSystem.show('已删除选中元素');
+                } else {
+                    tipSystem.show('请先选择要删除的元素');
+                }
+            });
+            
+            // 画布事件监听
+            canvas.on('selection:created', (e) => {
+                const obj = e.target;
+                sizeSync.syncFromObject(obj);
+                
+                if (obj.type === 'text') {
+                    tipSystem.show('已选择文字，可编辑内容和调整大小');
+                } else if (obj.type === 'image') {
+                    tipSystem.show('已选择图片，可调整位置和大小');
+                } else {
+                    tipSystem.show('已选择图形，可调整位置和大小');
+                }
+            });
+            
+            canvas.on('selection:updated', (e) => {
+                sizeSync.syncFromObject(e.target);
+            });
+            
+            canvas.on('selection:cleared', () => {
+                tipSystem.show('取消选择');
+            });
+            
+            // 全局边界检查函数
+            function enforceObjectBoundaries(obj) {
+                // 获取对象的实际尺寸
+                const objWidth = obj.getScaledWidth();
+                const objHeight = obj.getScaledHeight();
+                
+                // 计算边界 - 允许对象在整个画布框架内移动
+                // 计算方式：对象的中心点可以移动到的最远位置 = 画布尺寸 - 对象尺寸/2
+                // 这样确保对象边缘刚好到达画布边缘时停止
+                const boundsLeft = objWidth / 2;
+                const boundsTop = objHeight / 2;
+                const boundsRight = CANVAS_WIDTH - objWidth / 2;
+                const boundsBottom = CANVAS_HEIGHT - objHeight / 2;
+                
+                // 调整对象位置，确保在边界内
+                let newLeft = obj.left;
+                let newTop = obj.top;
+                
+                // 只在超出边界时调整位置
+                if (newLeft < boundsLeft) newLeft = boundsLeft;
+                if (newLeft > boundsRight) newLeft = boundsRight;
+                if (newTop < boundsTop) newTop = boundsTop;
+                if (newTop > boundsBottom) newTop = boundsBottom;
+                
+                // 只有在位置需要调整时才应用更改
+                if (newLeft !== obj.left || newTop !== obj.top) {
+                    obj.set({
+                        left: newLeft,
+                        top: newTop
+                    });
+                    canvas.requestRenderAll();
+                }
+                
+                // 记录对象的安全尺寸
+                obj.lastSafeScaleX = obj.scaleX;
+                obj.lastSafeScaleY = obj.scaleY;
+                
+                return obj;
+            }
+
+            // 添加对象边界限制
+            canvas.on('object:moving', (e) => {
+                const obj = e.target;
+                // 获取对象的实际尺寸
+                const objWidth = obj.getScaledWidth();
+                const objHeight = obj.getScaledHeight();
+                
+                // 计算边界 - 与全局函数保持一致
+                const boundsLeft = objWidth / 2;
+                const boundsTop = objHeight / 2;
+                const boundsRight = CANVAS_WIDTH - objWidth / 2;
+                const boundsBottom = CANVAS_HEIGHT - objHeight / 2;
+                
+                // 限制对象位置在边界内
+                if (obj.left < boundsLeft) obj.set({ left: boundsLeft });
+                if (obj.left > boundsRight) obj.set({ left: boundsRight });
+                if (obj.top < boundsTop) obj.set({ top: boundsTop });
+                if (obj.top > boundsBottom) obj.set({ top: boundsBottom });
+                
+                // 检查是否接近边界
+                const margin = 2; // 边界提示的容差
+                if (Math.abs(obj.left - boundsLeft) < margin || 
+                    Math.abs(obj.left - boundsRight) < margin || 
+                    Math.abs(obj.top - boundsTop) < margin || 
+                    Math.abs(obj.top - boundsBottom) < margin) {
+                    tipSystem.show('对象已达到边界');
+                } else {
+                    tipSystem.show('正在移动对象');
+                }
+            });
+            
+            // 添加缩放边界限制
+            canvas.on('object:scaling', (e) => {
+                tipSystem.show('正在调整大小');
+                
+                const obj = e.target;
+                
+                // 获取对象的中心点和当前尺寸
+                const centerX = obj.left;
+                const centerY = obj.top;
+                const currentWidth = obj.width * obj.scaleX;
+                const currentHeight = obj.height * obj.scaleY;
+                
+                // 检查对象是否超出画布边界
+                const leftEdge = centerX - currentWidth / 2;
+                const rightEdge = centerX + currentWidth / 2;
+                const topEdge = centerY - currentHeight / 2;
+                const bottomEdge = centerY + currentHeight / 2;
+                
+                // 如果缩放导致对象超出画布，则恢复到安全尺寸
+                if (leftEdge < 0 || rightEdge > CANVAS_WIDTH || 
+                    topEdge < 0 || bottomEdge > CANVAS_HEIGHT) {
+                    
+                    if (obj.lastSafeScaleX && obj.lastSafeScaleY) {
+                        obj.set({
+                            scaleX: obj.lastSafeScaleX,
+                            scaleY: obj.lastSafeScaleY
+                        });
+                        canvas.requestRenderAll();
+                    }
+                    tipSystem.show('对象尺寸已达到边界');
+                } else {
+                    // 保存当前安全的缩放状态
+                    obj.lastSafeScaleX = obj.scaleX;
+                    obj.lastSafeScaleY = obj.scaleY;
+                }
+            });
+            
+            // 在对象修改后检查边界（减少频率以提高性能）
+            canvas.on('object:modified', (e) => {
+                enforceObjectBoundaries(e.target);
+            });
+            
+            // 文本编辑事件恢复
+            canvas.on('text:editing:entered', () => {
+                tipSystem.show('正在编辑文字，点击空白处完成');
+            });
+            
+            canvas.on('text:editing:exited', (e) => {
+                elements.textContent.value = e.target.text;
+                tipSystem.show('文字编辑完成');
+            });
+
+            // 调整canvas-wrapper大小，确保画布可见且居中
+            const fitCanvasToScreen = () => {
+                const wrapper = document.getElementById('canvas-wrapper');
+                const windowHeight = window.innerHeight;
+                const toolbarHeight = document.querySelector('.flex.flex-wrap').offsetHeight;
+                const padding = 24; // 上下各12px的padding
+                
+                // 计算wrapper可用高度
+                const availableHeight = windowHeight - toolbarHeight - padding;
+                wrapper.style.height = `${availableHeight}px`;
+                
+                // 根据画布内容进行初始化缩放
+                if (canvas && canvas.getObjects().length > 0) {
+                    // 如果已有内容，则自动适应内容
+                    setTimeout(() => zoomSystem.zoomToFitContent(), 100);
+                } else {
+                    // 否则使用标准初始化方法
+                    const containerWidth = wrapper.offsetWidth;
+                    const containerHeight = wrapper.offsetHeight;
+                    
+                    const widthRatio = containerWidth / CANVAS_WIDTH;
+                    const heightRatio = containerHeight / CANVAS_HEIGHT;
+                    zoomLevel = Math.min(widthRatio, heightRatio) * 0.95;
+                    
+                    canvas.setZoom(zoomLevel);
+                canvas.setDimensions({ 
+                        width: CANVAS_WIDTH * zoomLevel,
+                        height: CANVAS_HEIGHT * zoomLevel
+                    });
+                }
+                
+                // 确保画布水平居中
+                canvasEl.style.margin = '0 auto';
+                
+                // 将canvas-wrapper调整为flex布局，使画布完全居中
+                wrapper.style.display = 'flex';
+                wrapper.style.justifyContent = 'center';
+                wrapper.style.alignItems = 'center';
+                
+                // 确保canvas包装器没有内部padding和边距
+                wrapper.style.padding = '0';
+                
+                // 更新缩放指示器
+                if (elements.zoomIndicator) {
+                    elements.zoomIndicator.textContent = `缩放: ${Math.round(zoomLevel * 100)}%`;
+                }
+            };
+            
+            // 初始化画布尺寸
+            fitCanvasToScreen();
+            window.addEventListener('resize', fitCanvasToScreen);
+            
+            // 显示初始操作提示
+            tipSystem.show('欢迎使用设计工具，画布已等比例缩放以适应屏幕', 3000);
+
+            // 创建对象切换叠加模式的功能
+            function toggleHollowMode(obj) {
+                if (!obj) return;
+                
+                // 只对非图片对象应用镂空效果
+                if (obj.type === 'image') {
+                    tipSystem.show('图片不能设置为镂空模式');
+                    return;
+                }
+                
+                // 切换对象的复合操作模式
+                if (obj.globalCompositeOperation === 'destination-out') {
+                    obj.set({
+                        globalCompositeOperation: 'source-over',
+                        fill: obj.type === 'text' ? '#333' : 'transparent',
+                        stroke: obj.type !== 'text' ? '#333' : undefined
+                    });
+                    tipSystem.show('已切换为正常模式，不会产生镂空效果');
+                } else {
+                    obj.set({
+                        globalCompositeOperation: 'destination-out'
+                        // 不改变填充色和边框色，保持对象原来的外观
+                    });
+                    tipSystem.show('已切换为镂空模式，将在下方图片上创建镂空效果');
+                }
+                canvas.requestRenderAll();
+            }
+
+            // 镂空模式切换按钮事件
+            document.getElementById('toggleHollowMode').addEventListener('click', function() {
+                appState.hollowMode = !appState.hollowMode;
+                this.textContent = appState.hollowMode ? '关闭镂空模式' : '启用镂空模式';
+                this.className = appState.hollowMode ? 
+                    'bg-orange-500 text-white input-sm touch-target' : 
+                    'bg-indigo-500 text-white input-sm touch-target';
+                    
+                tipSystem.show(appState.hollowMode ? 
+                    '已启用镂空模式，新添加的图形和文字将在图片上创建镂空效果' : 
+                    '已关闭镂空模式，新添加的图形和文字将使用正常显示');
+                
+                // 切换当前选中对象的镂空模式（如果不是图片）
+                const activeObj = canvas.getActiveObject();
+                if (activeObj && activeObj.type !== 'image') {
+                    if (appState.hollowMode && activeObj.globalCompositeOperation !== 'destination-out') {
+                        toggleHollowMode(activeObj);
+                    } else if (!appState.hollowMode && activeObj.globalCompositeOperation === 'destination-out') {
+                        toggleHollowMode(activeObj);
+                    }
+                }
+            });
+
+            // 添加右键菜单切换功能
+            canvas.on('mouse:down', function(opt) {
+                const evt = opt.e;
+                if (evt.button === 2) {  // 右键点击
+                    evt.preventDefault();
+                    const pointer = canvas.getPointer(evt);
+                    const clickedObj = canvas.findTarget(pointer, true);
+                    
+                    if (clickedObj && clickedObj.type !== 'image') {
+                        toggleHollowMode(clickedObj);
+                    }
+                }
+            });
+
+            // 禁用默认右键菜单
+            document.getElementById('canvas-wrapper').addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
+    
